@@ -1,12 +1,13 @@
 import mongoose from "mongoose";
 import { makeExecutableSchema } from '@graphql-tools/schema'
 import { merge } from 'lodash';
-import { GraphQLSchema } from "graphql";
+import { DocumentNode, GraphQLSchema } from "graphql";
 import Controller from "./interface/controller.interface";
 
 import { ApolloServer } from '@apollo/server';
 import { startStandaloneServer } from '@apollo/server/standalone';
 import CustomContext from "./interface/basecontext.interface";
+import gql from "graphql-tag";
 
 export default class App {
 
@@ -30,7 +31,7 @@ export default class App {
 
 
     private createSchema = (controllers: Controller[]) => {
-        let typeDefs: string[] = []
+        let typeDefs: DocumentNode[] = []
         let resolvers: object[] = []
 
         controllers.forEach(controller => {
@@ -39,15 +40,16 @@ export default class App {
         })
 
 
-        const customtypeDefs = `#graphql
-                                type Status {
-                                    status:Boolean,
-                                    message:String
-                                }
-                                type Query {
-                                    chechConnection: Status
-                                }
-                                `;
+        const customtypeDefs =
+            gql`
+            type Status {
+                status:Boolean,
+                message:String
+            }
+            type Query {
+                chechConnection: Status
+            }
+        `;
 
         const customresolvers = {
             Query: {
@@ -73,6 +75,7 @@ export default class App {
             if (DB === '') {
                 throw new Error('DB is not set in environment');
             }
+            mongoose.set('strictQuery', false)
             return await mongoose.connect(DB);
         } catch (error) {
             console.log(error)
@@ -82,7 +85,13 @@ export default class App {
 
     public async listen(PORT: number = 3000) {
         this.connection.graphQL = await startStandaloneServer(this.server, {
-            context: async ({ req }) => ({ user: req.headers.authorization && req.headers.authorization.startsWith('Bearer') ? { _id: req.headers.authorization.split(' ')[1] } : null }),
+            context: async ({ req }) => {
+                return ({
+                    token: req.headers.authorization && req.headers.authorization.startsWith('Bearer') ?
+                        req.headers.authorization.split(' ')[1] :
+                        null
+                })
+            },
             listen: { port: PORT },
         })
         console.log(`GRAPHQL SERVER STARTED AT ${this.connection.graphQL.url} `)

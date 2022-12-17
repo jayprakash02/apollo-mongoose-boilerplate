@@ -1,4 +1,6 @@
+import { DocumentNode } from "graphql"
+
 export default interface Controller {
-    typeDefs:any
-    resolvers:any
+    typeDefs: DocumentNode
+    resolvers: object
 }
