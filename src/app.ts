@@ -8,20 +8,58 @@ import { ApolloServer } from '@apollo/server';
 import { startStandaloneServer } from '@apollo/server/standalone';
 import CustomContext from "./interface/basecontext.interface";
 import gql from "graphql-tag";
+import express, { Express } from "express";
+import http from 'http';
+import cors from 'cors';
+import bodyParser from 'body-parser';
+import { expressMiddleware } from '@apollo/server/express4';
+import { WebSocketServer } from 'ws';
+import { useServer } from 'graphql-ws/lib/use/ws';
+import { ApolloServerPluginDrainHttpServer } from '@apollo/server/plugin/drainHttpServer';
 
 export default class App {
 
-    public server: ApolloServer<CustomContext>;
     public connection: { graphQL: { url?: string }, db_connection: Boolean } = { graphQL: {}, db_connection: false };
 
+    private app: Express = express();
+    private path: string = '/'
+    private httpServer: any = http.createServer(this.app);
+
+    private gqlServer: ApolloServer<CustomContext>;
+
+    private wsServer: WebSocketServer = new WebSocketServer({
+        server: this.httpServer,
+        path: this.path,
+    });
+
+
     constructor(controllers: Controller[]) {
-        this.initialized()
+        this.initialized(controllers)
 
         const schema: GraphQLSchema = this.createSchema(controllers);
-        this.server = new ApolloServer<CustomContext>({ schema });
+
+        const serverCleanup = useServer({ schema }, this.wsServer);
+
+
+        this.gqlServer = new ApolloServer<CustomContext>({
+            schema, plugins: [
+                ApolloServerPluginDrainHttpServer({
+                    httpServer: this.httpServer
+                }),
+                {
+                    serverWillStart: async () => {
+                        return {
+                            drainServer: async () => {
+                                await serverCleanup.dispose();
+                            },
+                        };
+                    }
+                }
+            ],
+        });
     }
 
-    private initialized = async () => {
+    private initialized = async (controllers: Controller[]) => {
         this.connection.db_connection = await this.connectToDatabase()
             .then(async (conn) => {
                 console.log(`DATABASE CONNECTED TO: ${conn.connection.host}`)
@@ -84,16 +122,30 @@ export default class App {
     }
 
     public async listen(PORT: number = 3000) {
-        this.connection.graphQL = await startStandaloneServer(this.server, {
-            context: async ({ req }) => {
-                return ({
-                    token: req.headers.authorization && req.headers.authorization.startsWith('Bearer') ?
-                        req.headers.authorization.split(' ')[1] :
-                        null
-                })
-            },
-            listen: { port: PORT },
-        })
-        console.log(`GRAPHQL SERVER STARTED AT ${this.connection.graphQL.url} `)
+
+        await this.gqlServer.start();
+
+        this.app.use(
+            this.path,
+            cors<cors.CorsRequest>(),
+            bodyParser.json(),
+            // expressMiddleware accepts the same arguments:
+            // an Apollo Server instance and optional configuration options
+            expressMiddleware(this.gqlServer, {
+                context: async ({ req }) => {
+                    return ({
+                        token: req.headers.authorization && req.headers.authorization.startsWith('Bearer') ?
+                            req.headers.authorization.split(' ')[1] :
+                            null
+                    });
+                },
+            })
+        );
+
+        await new Promise<void>((resolve) => this.httpServer.listen({ port: PORT }, resolve));
+
+
+        console.log(`🚀 Server ready at http://localhost:${PORT}${this.path}`);
     }
 }
+

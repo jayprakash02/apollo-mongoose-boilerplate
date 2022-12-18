@@ -94,8 +94,6 @@ export default class UserController implements Contorller {
         `
     }
 
-
-
     getResolvers(): object {
         return {
             Query: {
@@ -119,7 +117,7 @@ export default class UserController implements Contorller {
                 },
                 updateUser: async (parent: any, args: { input: object }, _contextValue: CustomContext) => {
                     const user = getuser(_contextValue.token)
-                    const new_user = await User.findOneAndUpdate(user, args.input,{new: true},)
+                    const new_user = await User.findOneAndUpdate(user, args.input, { new: true },)
                     return new_user;
                 },
             }
@@ -128,7 +126,6 @@ export default class UserController implements Contorller {
 
         }
     }
-
 
     private getToken = (id: string, exp: string) => {
         return {
