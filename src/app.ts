@@ -5,7 +5,6 @@ import { DocumentNode, GraphQLSchema } from "graphql";
 import Controller from "./interface/controller.interface";
 
 import { ApolloServer } from '@apollo/server';
-import { startStandaloneServer } from '@apollo/server/standalone';
 import CustomContext from "./interface/basecontext.interface";
 import gql from "graphql-tag";
 import express, { Express } from "express";
@@ -38,7 +37,13 @@ export default class App {
 
         const schema: GraphQLSchema = this.createSchema(controllers);
 
-        const serverCleanup = useServer({ schema }, this.wsServer);
+        const serverCleanup = useServer({
+            schema, context: async (ctx, msg, args) => {
+                // You can define your own function for setting a dynamic context
+                // or provide a static value
+                return this.getDynamicContext(ctx, msg, args);
+            },
+        }, this.wsServer);
 
 
         this.gqlServer = new ApolloServer<CustomContext>({
@@ -57,6 +62,16 @@ export default class App {
                 }
             ],
         });
+    }
+
+    private getDynamicContext = async (ctx: any, msg: any, args: any) => {
+        // ctx is the graphql-ws Context where connectionParams live
+        return ({
+            token: ctx.connectionParams.Authorization && ctx.connectionParams.Authorization.startsWith('Bearer') ?
+                ctx.connectionParams.Authorization.split(' ')[1] :
+                null
+        });
+
     }
 
     private initialized = async (controllers: Controller[]) => {

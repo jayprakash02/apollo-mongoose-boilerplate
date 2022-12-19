@@ -5,6 +5,11 @@ import CustomContext from "../interface/basecontext.interface";
 import gql from "graphql-tag";
 import { DocumentNode } from "graphql";
 import getuser from "../functions/getUser";
+import { subscribe } from "graphql/execution";
+import { Types } from "mongoose";
+
+import { RedisPubSub } from 'graphql-redis-subscriptions';
+const pubsub = new RedisPubSub();
 
 export default class UserController implements Contorller {
     public token_expiry = '5h';
@@ -91,6 +96,10 @@ export default class UserController implements Contorller {
             updateUser(input:UpdateUserInput):User
 
         }
+
+        type Subscription {
+            onUpdateUser:User
+        }
         `
     }
 
@@ -118,13 +127,23 @@ export default class UserController implements Contorller {
                 updateUser: async (parent: any, args: { input: object }, _contextValue: CustomContext) => {
                     const user = getuser(_contextValue.token)
                     const new_user = await User.findOneAndUpdate(user, args.input, { new: true },)
-                    return new_user;
+                    return this.echo(new_user, `onUpdateUser.${new_user?._id}`);
                 },
+            },
+            Subscription: {
+                onUpdateUser: {
+                    subscribe: async (parent: any, args: any, _contextValue: CustomContext) => {
+                        const user = await getuser(_contextValue.token)
+                        return pubsub.asyncIterator(`onUpdateUser.${user._id}`)
+                    }
+                }
             }
 
 
 
         }
+
+
     }
 
     private getToken = (id: string, exp: string) => {
@@ -134,6 +153,14 @@ export default class UserController implements Contorller {
             }),
             expiresIn: exp,
         }
+    }
+
+    async echo(output: any, subscriber: string) {
+        const data: any = {};
+        const key = subscriber.split('.')[0]
+        data[key] = output
+        pubsub.publish(subscriber, data);
+        return output;
     }
 
 
