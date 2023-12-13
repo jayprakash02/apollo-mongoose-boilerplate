@@ -124,15 +124,24 @@ export default class App {
 
     private async connectToDatabase() {
         try {
-            const DB: string = process.env.DB || '';
-            if (DB === '') {
-                throw new Error('DB is not set in environment');
+            const DB_USER: string = process.env.DB_USER || 'user123';
+            const DB_PASSWORD: string = process.env.DB_PASSWORD || 'user123';
+            const DB_HOST: string = process.env.DB_HOST || 'localhost';
+            const DB_PORT: string = process.env.DB_PORT || '27017';
+            const DB_NAME: string = process.env.DB_NAME || 'test';
+
+            if (DB_USER === '' || DB_PASSWORD === '') {
+                throw new Error('DB_USER or DB_PASSWORD is not set in environment');
             }
-            mongoose.set('strictQuery', false)
-            return await mongoose.connect(DB);
+
+            // const connectionString = `mongodb://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}`;
+            const connectionString = `mongodb://${DB_HOST}:${DB_PORT}/${DB_NAME}`;
+
+            mongoose.set('strictQuery', false);
+            return await mongoose.connect(connectionString);
         } catch (error) {
-            console.log(error)
-            process.exit(1)
+            console.error(error);
+            process.exit(1);
         }
     }
 
